@@ -13,15 +13,6 @@
 ![Custom Stroke Font](https://img.shields.io/badge/-Custom_Stroke_Font-1f883d?style=flat-square)
 ![No External Math/UI Libraries](https://img.shields.io/badge/-No_External_Math%2FUI_Libraries-c9510c?style=flat-square)
 
-```
-Language     : C++17
-Graphics     : OpenGL 3.3 Core
-Members      : 71+  (procedurally generated)
-JSON Input   : Supported
-CSV Export   : Supported
-Platforms    : Windows / macOS / Linux
-```
-
 ![FrameLens demo](docs/framelens-demo.gif)
 
 FrameLens is a data-driven 2×4 framing Mini-CAD built with C++17 and OpenGL 3.3 Core.
@@ -45,11 +36,21 @@ JSON パーサ・ストロークフォント・レンダリングまでを自前
 - ✅ Procedural 2×4 Framing Generation
 - ✅ Ray Picking
 - ✅ Member ID / Zone Assignment
+- ✅ Material Classification
 - ✅ Dimension Rendering
 - ✅ JSON-driven Configuration
 - ✅ CSV Export
 - ✅ Custom Linear Algebra
 - ✅ Custom JSON Parser
+
+```
+Language     : C++17
+Graphics     : OpenGL 3.3 Core
+Members      : 71+  (procedurally generated)
+JSON Input   : Supported
+CSV Export   : Supported
+Platforms    : Windows / macOS / Linux
+```
 
 ---
 
