@@ -1,0 +1,7 @@
+build/
+*.ppm
+*.o
+*.a
+.DS_Store
+framelens_export.csv
+screenshot.ppm

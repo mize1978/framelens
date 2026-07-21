@@ -1,0 +1,11 @@
+{
+  "width":      4550,
+  "depth":      3640,
+  "wallHeight": 2400,
+  "studPitch":  455,
+  "roofRise":   1100,
+  "openings": [
+    { "type": "door",   "x": 900,  "width": 900,  "sill": 0,   "head": 2000 },
+    { "type": "window", "x": 2700, "width": 1600, "sill": 800, "head": 2000 }
+  ]
+}
