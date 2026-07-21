@@ -13,6 +13,17 @@
 ![Custom Stroke Font](https://img.shields.io/badge/-Custom_Stroke_Font-1f883d?style=flat-square)
 ![No External Math/UI Libraries](https://img.shields.io/badge/-No_External_Math%2FUI_Libraries-c9510c?style=flat-square)
 
+```
+Language     : C++17
+Graphics     : OpenGL 3.3 Core
+Members      : 71+  (procedurally generated)
+JSON Input   : Supported
+CSV Export   : Supported
+Platforms    : Windows / macOS / Linux
+```
+
+![FrameLens demo](docs/framelens-demo.gif)
+
 FrameLens is a data-driven 2×4 framing Mini-CAD built with C++17 and OpenGL 3.3 Core.
 It procedurally generates framing members, supports picking, dimensions, JSON configuration, and CSV export.
 
@@ -26,49 +37,19 @@ JSON パーサ・ストロークフォント・レンダリングまでを自前
 
 ![外観](docs/view-hero.png)
 
-```
-Language   : C++17
-Graphics   : OpenGL 3.3 Core
-Members    : 71+ (procedurally generated)
-JSON Input : Supported
-CSV Export : Supported
-Platforms  : Windows / macOS / Linux
-```
-
 ---
 
 ## Features
 
-- ✅ OpenGL 3.3 Core Rendering (VAO / VBO / custom shaders)
+- ✅ OpenGL 3.3 Core Rendering
 - ✅ Procedural 2×4 Framing Generation
-- ✅ Ray Picking (AABB intersection, handles rotated rafters)
-- ✅ Member ID / Zone Assignment (S-014, South Wall, …)
-- ✅ GPU Highlight (separate VAO, 1.04× scale, yellow shader)
-- ✅ Dimension Lines with Stroke-Font Numbers
-- ✅ JSON-driven Configuration (`house.json`)
-- ✅ CSV Export (`C` key → `framelens_export.csv`)
-- ✅ Custom Linear Algebra (Vec3 / Mat4, no glm)
-- ✅ Custom JSON Parser (no external library)
-
----
-
-## Architecture
-
-```
-             house.json
-                  │
-                  ▼
-        Framing Generator  (framing.cpp)
-                  │
-     ┌────────────┴────────────┐
-     ▼                         ▼
- Mesh Builder             Member Database
- (buildMesh)              (id / zone / material)
-     │                         │
-     ▼                         ▼
- OpenGL Renderer          Picking / CSV Export
- (main.cpp)               (rayAABB / csvExport)
-```
+- ✅ Ray Picking
+- ✅ Member ID / Zone Assignment
+- ✅ Dimension Rendering
+- ✅ JSON-driven Configuration
+- ✅ CSV Export
+- ✅ Custom Linear Algebra
+- ✅ Custom JSON Parser
 
 ---
 
@@ -113,6 +94,20 @@ Platforms  : Windows / macOS / Linux
 | 妻面（垂木・棟木・合掌） | 屋根伏せ（垂木・棟木・天井根太） |
 |---|---|
 | ![妻面](docs/view-gable.png) | ![屋根](docs/view-roof.png) |
+
+---
+
+## Architecture
+
+```mermaid
+graph TD
+    J[house.json] --> G[Framing Generator]
+    G --> M[Mesh Builder]
+    G --> DB[Member Database]
+    M --> R[OpenGL Renderer]
+    DB --> P[Picking]
+    DB --> C[CSV Export]
+```
 
 ---
 
@@ -196,7 +191,6 @@ cmake -S . -B build && cmake --build build -j
 ./build/framelens --in house.json --shot out.ppm --size 1280x800 --select 40
 # ディスプレイの無いサーバなら: xvfb-run -a ./build/framelens --shot out.ppm
 ```
-（本 README の画像もすべてこの機能で自動生成しています。）
 
 ---
 
