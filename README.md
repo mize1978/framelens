@@ -32,16 +32,29 @@ JSON パーサ・ストロークフォント・レンダリングまでを自前
 
 ## Features
 
+FrameLens は C++ / OpenGL を用いて開発した 2×4 木造フレームの 3D 可視化ツールです。
+手続き生成によるフレーム作成、Ray Picking による部材選択、寸法表示、部材拾い出し（CSV 出力）などを実装しています。
+
+> ※ バナーには将来構想（構造解析 UI イメージ）を一部含みます。現在の実装範囲は下記の機能です。
+
+### 現在の実装
+
 - ✅ OpenGL 3.3 Core Rendering
 - ✅ Procedural 2×4 Framing Generation
-- ✅ Ray Picking
+- ✅ Ray Picking による部材選択
 - ✅ Member ID / Zone Assignment
 - ✅ Material Classification
-- ✅ Dimension Rendering
+- ✅ Dimension Rendering（寸法表示）
 - ✅ JSON-driven Configuration
-- ✅ CSV Export
+- ✅ CSV Export（部材拾い出し）
 - ✅ Custom Linear Algebra
 - ✅ Custom JSON Parser
+
+### 今後の予定
+
+- 🔲 構造解析機能（Concept）
+- 🔲 応力可視化
+- 🔲 レポート生成
 
 ```
 Language     : C++17
