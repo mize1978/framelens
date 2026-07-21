@@ -26,6 +26,50 @@ JSON パーサ・ストロークフォント・レンダリングまでを自前
 
 ![外観](docs/view-hero.png)
 
+```
+Language   : C++17
+Graphics   : OpenGL 3.3 Core
+Members    : 71+ (procedurally generated)
+JSON Input : Supported
+CSV Export : Supported
+Platforms  : Windows / macOS / Linux
+```
+
+---
+
+## Features
+
+- ✅ OpenGL 3.3 Core Rendering (VAO / VBO / custom shaders)
+- ✅ Procedural 2×4 Framing Generation
+- ✅ Ray Picking (AABB intersection, handles rotated rafters)
+- ✅ Member ID / Zone Assignment (S-014, South Wall, …)
+- ✅ GPU Highlight (separate VAO, 1.04× scale, yellow shader)
+- ✅ Dimension Lines with Stroke-Font Numbers
+- ✅ JSON-driven Configuration (`house.json`)
+- ✅ CSV Export (`C` key → `framelens_export.csv`)
+- ✅ Custom Linear Algebra (Vec3 / Mat4, no glm)
+- ✅ Custom JSON Parser (no external library)
+
+---
+
+## Architecture
+
+```
+             house.json
+                  │
+                  ▼
+        Framing Generator  (framing.cpp)
+                  │
+     ┌────────────┴────────────┐
+     ▼                         ▼
+ Mesh Builder             Member Database
+ (buildMesh)              (id / zone / material)
+     │                         │
+     ▼                         ▼
+ OpenGL Renderer          Picking / CSV Export
+ (main.cpp)               (rayAABB / csvExport)
+```
+
 ---
 
 ## これは何を示すためのものか
