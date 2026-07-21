@@ -144,6 +144,16 @@ FrameConfig loadConfig(const std::string& path) {
                     path.c_str(), cfg.width, cfg.depth, cfg.wallH);
         return cfg;
     }
+
+    // ファイルサイズ上限（1 MB）
+    f.seekg(0, std::ios::end);
+    auto fileSize = f.tellg();
+    f.seekg(0, std::ios::beg);
+    if (fileSize > 1 * 1024 * 1024) {
+        std::printf("[config] %s too large (>1 MB) — defaults used\n", path.c_str());
+        return cfg;
+    }
+
     std::string s((std::istreambuf_iterator<char>(f)),
                    std::istreambuf_iterator<char>());
 
@@ -154,9 +164,23 @@ FrameConfig loadConfig(const std::string& path) {
 
     cfg.width     = gf("width",      cfg.width);
     cfg.depth     = gf("depth",      cfg.depth);
-    cfg.wallH     = gf("wallHeight", cfg.wallH);   // JSON キー: wallHeight
-    cfg.rise      = gf("roofRise",   cfg.rise);    // JSON キー: roofRise
+    cfg.wallH     = gf("wallHeight", cfg.wallH);
+    cfg.rise      = gf("roofRise",   cfg.rise);
     cfg.studPitch = gf("studPitch",  cfg.studPitch);
+
+    // 値域チェック＆クランプ
+    auto clamp = [&](float& v, float lo, float hi, const char* name) {
+        if (v < lo || v > hi) {
+            std::printf("[config] %s=%.0f out of range [%.0f, %.0f] — clamped\n",
+                        name, v, lo, hi);
+            v = std::max(lo, std::min(hi, v));
+        }
+    };
+    clamp(cfg.width,     500.0f,  30000.0f, "width");
+    clamp(cfg.depth,     500.0f,  30000.0f, "depth");
+    clamp(cfg.wallH,     1000.0f,  6000.0f, "wallHeight");
+    clamp(cfg.rise,        0.0f,   5000.0f, "roofRise");
+    clamp(cfg.studPitch,  100.0f,  1000.0f, "studPitch");
 
     // openings 配列を解析（各オブジェクト: type, x, width, sill, head）
     auto objs = jsArrayObjs(s, "openings");
@@ -168,6 +192,12 @@ FrameConfig loadConfig(const std::string& path) {
             o.w    = static_cast<float>(jsNumber(obj, "width",  900.0));
             o.sill = static_cast<float>(jsNumber(obj, "sill",   0.0));
             o.head = static_cast<float>(jsNumber(obj, "head",   2000.0));
+            // 開口の整合性チェック
+            if (o.x0 < 0.0f)            o.x0 = 0.0f;
+            if (o.w  < T)               o.w  = T;
+            if (o.head <= o.sill)       o.head = o.sill + T;
+            if (o.x0 + o.w > cfg.width) o.w  = cfg.width - o.x0;
+            if (o.head > cfg.wallH)     o.head = cfg.wallH;
             cfg.frontOps.push_back(o);
         }
     }

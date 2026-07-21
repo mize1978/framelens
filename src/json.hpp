@@ -54,7 +54,7 @@ inline std::vector<std::string> jsArrayObjs(const std::string& s, const char* ke
             if (depth == 0) objStart = p;
             ++depth;
         } else if (s[p] == '}') {
-            --depth;
+            if (depth > 0) --depth;   // malformed JSON で depth が負にならないよう守る
             if (depth == 0 && objStart != std::string::npos) {
                 result.push_back(s.substr(objStart, p - objStart + 1));
                 objStart = std::string::npos;
