@@ -13,9 +13,11 @@
 ![Custom Stroke Font](https://img.shields.io/badge/-Custom_Stroke_Font-1f883d?style=flat-square)
 ![No External Math/UI Libraries](https://img.shields.io/badge/-No_External_Math%2FUI_Libraries-c9510c?style=flat-square)
 
-**2×4（枠組壁工法）建築の構造フレームを、実寸で手続き的に生成して 3D 表示する
-C++ / OpenGL の簡易 CAD。** 部材クリックで選択、部材ID・断面・材長・ゾーンの表示、
-寸法線注記、JSON からの建物入力に対応します。
+FrameLens is a data-driven 2×4 framing Mini-CAD built with C++17 and OpenGL 3.3 Core.
+It procedurally generates framing members, supports picking, dimensions, JSON configuration, and CSV export.
+
+2×4（枠組壁工法）建築の構造フレームを実寸で手続き的に生成し、
+部材クリック選択・部材ID・断面・材長・ゾーン表示・寸法線注記・JSON 入力に対応します。
 
 貴社の主力である 2×4 建築向け CAD・生産支援システムのドメインに寄せ、
 「C++ / Windows / 3D グラフィックス（OpenGL）」という開発環境を想定して自作しました。
