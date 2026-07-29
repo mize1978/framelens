@@ -1,5 +1,5 @@
 // FrameLens — 2x4 枠組フレームの 3D ビューア
-// C++17 / OpenGL 3.3 Core / GLFW / GLEW
+// C++17 / OpenGL 3.3 Core (ネイティブ) · WebGL2/GLES3 (Web, Emscripten)
 //
 // 操作:
 //   マウス左クリック（ドラッグなし）… 部材クリック選択 + 情報表示
@@ -8,18 +8,22 @@
 //   W                              … ソリッド / ワイヤーフレーム切替
 //   G                              … 参照グリッド 表示切替
 //   D                              … 寸法線 表示切替
-//   C                              … CSV エクスポート（framelens_export.csv）
-//   P                              … スクリーンショット保存（screenshot.ppm）
+//   C                              … CSV エクスポート（Web はブラウザ DL）
+//   P                              … スクリーンショット保存（ネイティブのみ）
 //   R                              … 視点リセット
-//   ESC                            … 終了
+//   ESC                            … 終了（ネイティブのみ）
 //
-// ヘッドレス書き出し:
+// ヘッドレス書き出し（ネイティブ）:
 //   framelens --shot out.ppm [--size 1280x800] [--yaw 0.9] [--pitch 0.35]
 // JSON 設定読み込み:
 //   framelens [--config house.json]
 //
-#include <GL/glew.h>
+#include "gl.hpp"
 #include <GLFW/glfw3.h>
+#ifdef __EMSCRIPTEN__
+  #include <emscripten.h>
+  #include <emscripten/html5.h>
+#endif
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -92,7 +96,23 @@ static void keyCB(GLFWwindow* w, int key, int, int action, int) {
     }
 }
 
-// ---- PPM 書き出し -----------------------------------------------------------
+#ifdef __EMSCRIPTEN__
+// MEMFS に書いたファイルをブラウザのダウンロードとして落とす。
+EM_JS(void, browserDownload, (const char* path, const char* filename, const char* mime), {
+    var p = UTF8ToString(path), name = UTF8ToString(filename), m = UTF8ToString(mime);
+    try {
+        var data = FS.readFile(p);
+        var blob = new Blob([data], { type: m });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement('a');
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (e) { console.error('download failed', e); }
+});
+#endif
+
+// ---- PPM 書き出し（ネイティブのスクリーンショット/--shot 用）---------------
 static bool writePPM(const std::string& path, int w, int h) {
     std::vector<unsigned char> px(static_cast<size_t>(w) * h * 3);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -120,126 +140,20 @@ static std::vector<float> makeBBoxLines(const AABB& b) {
     return v;
 }
 
-int main(int argc, char** argv) {
-    // ---- 引数 ---------------------------------------------------------------
-    std::string shot;
-    std::string configPath = "house.json";
-    int   winW = 1280, winH = 800;
-    int   selectArg = -1;           // --select N: ヘッドレス時に部材をプリセレクト
-    float argYaw = 0.9f, argPitch = 0.35f;
-    for (int i = 1; i < argc; ++i) {
-        if      (!std::strcmp(argv[i], "--shot")   && i+1<argc) shot       = argv[++i];
-        else if ((!std::strcmp(argv[i], "--in") ||
-                  !std::strcmp(argv[i], "--config")) && i+1<argc) configPath = argv[++i];
-        else if (!std::strcmp(argv[i], "--select") && i+1<argc) selectArg = std::atoi(argv[++i]);
-        else if (!std::strcmp(argv[i], "--size")   && i+1<argc) std::sscanf(argv[++i], "%dx%d", &winW, &winH);
-        else if (!std::strcmp(argv[i], "--yaw")    && i+1<argc) argYaw   = static_cast<float>(std::atof(argv[++i]));
-        else if (!std::strcmp(argv[i], "--pitch")  && i+1<argc) argPitch = static_cast<float>(std::atof(argv[++i]));
-    }
-
-    // ---- 設定 + ジオメトリ生成 ----------------------------------------------
-    FrameConfig cfg   = loadConfig(configPath);
-    std::vector<Member> frame = generateFrame(cfg);
-    std::vector<float>  mesh  = buildMesh(frame);
-    std::vector<float>  grid  = buildGrid(4000.0f, cfg.studPitch);
-    std::vector<float>  dimv  = buildDimLines(cfg.width, cfg.depth);
-
-    std::printf("Members: %zu\n%s\n", frame.size(), billOfMaterials(frame).c_str());
-
-    // ---- GLFW / OpenGL 初期化 -----------------------------------------------
-    if (!glfwInit()) { std::fprintf(stderr, "glfwInit failed\n"); return 1; }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
-    if (!shot.empty()) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-
-    GLFWwindow* win = glfwCreateWindow(winW, winH,
-        "FrameLens — 2x4 Framing Viewer  |  Click member to inspect",
-        nullptr, nullptr);
-    if (!win) { std::fprintf(stderr, "window creation failed\n"); glfwTerminate(); return 1; }
-    glfwMakeContextCurrent(win);
-    glfwSwapInterval(1);
-
-    glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK) { std::fprintf(stderr, "glewInit failed\n"); return 1; }
-    glGetError();
-    std::printf("OpenGL %s / GLSL %s\n",
-                glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
-
-    // ---- メッシュ VAO/VBO (GL_STATIC_DRAW: 選択時も変更しない) -------------
-    const GLsizei meshVerts = static_cast<GLsizei>(mesh.size() / 9);
-    GLuint meshVAO, meshVBO;
-    glGenVertexArrays(1, &meshVAO); glGenBuffers(1, &meshVBO);
-    glBindVertexArray(meshVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, meshVBO);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(mesh.size()*sizeof(float)),
-                 mesh.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)0);            glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(6*sizeof(float))); glEnableVertexAttribArray(2);
-
-    // ---- グリッド VAO/VBO ---------------------------------------------------
-    const GLsizei gridVerts = static_cast<GLsizei>(grid.size() / 3);
-    GLuint gridVAO, gridVBO;
-    glGenVertexArrays(1, &gridVAO); glGenBuffers(1, &gridVBO);
-    glBindVertexArray(gridVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(grid.size()*sizeof(float)),
-                 grid.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
-
-    // ---- 寸法線 VAO/VBO -----------------------------------------------------
-    const GLsizei dimVerts = static_cast<GLsizei>(dimv.size() / 3);
-    GLuint dimVAO, dimVBO;
-    glGenVertexArrays(1, &dimVAO); glGenBuffers(1, &dimVBO);
-    glBindVertexArray(dimVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, dimVBO);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(dimv.size()*sizeof(float)),
-                 dimv.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
-
-    // ---- ハイライト VAO/VBO（選択部材1本を 1.04x スケールで別描画）---------
-    GLuint hlVAO, hlVBO;
-    GLsizei hlVerts = 0;
-    glGenVertexArrays(1, &hlVAO); glGenBuffers(1, &hlVBO);
-    glBindVertexArray(hlVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, hlVBO);
-    glBufferData(GL_ARRAY_BUFFER, 36*9*sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)0);            glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(6*sizeof(float))); glEnableVertexAttribArray(2);
-
-    // ---- ⑧ BBox VAO/VBO (選択時に glBufferData で更新) ---------------------
-    GLuint bboxVAO, bboxVBO;
-    glGenVertexArrays(1, &bboxVAO); glGenBuffers(1, &bboxVBO);
-    glBindVertexArray(bboxVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, bboxVBO);
-    glBufferData(GL_ARRAY_BUFFER, 72*sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-
-    GLuint modelProg = linkProgram(MODEL_VS, MODEL_FS);
-    GLuint lineProg  = linkProgram(LINE_VS, LINE_FS);
-
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_MULTISAMPLE);
-
+// ---- アプリ状態（ヒープ確保：Web のメインループはコールバック方式のため）----
+struct App {
+    GLFWwindow* win = nullptr;
     AppState state;
-    state.cam.target = frameCenter(cfg);
-    state.cam.yaw    = argYaw;
-    state.cam.pitch  = argPitch;
-    state.cam.dist   = 8200.0f;
-    state.home       = state.cam;
-    glfwSetWindowUserPointer(win, &state);
-    glfwSetMouseButtonCallback(win, mouseButtonCB);
-    glfwSetCursorPosCallback(win, cursorPosCB);
-    glfwSetScrollCallback(win, scrollCB);
-    glfwSetKeyCallback(win, keyCB);
+    std::vector<Member> frame;
 
-    // ---- 描画ラムダ ---------------------------------------------------------
-    auto drawScene = [&](int fbW, int fbH) {
+    GLuint  meshVAO=0, gridVAO=0, dimVAO=0, hlVAO=0, hlVBO=0, bboxVAO=0, bboxVBO=0;
+    GLsizei meshVerts=0, gridVerts=0, dimVerts=0, hlVerts=0;
+    GLuint  modelProg=0, lineProg=0;
+
+    double prevTime=0; int frameCount=0;
+
+    // ---- 描画 -------------------------------------------------------------
+    void draw(int fbW, int fbH) {
         glViewport(0, 0, fbW, fbH);
         glClearColor(0.11f, 0.12f, 0.14f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -264,7 +178,6 @@ int main(int argc, char** argv) {
             glBindVertexArray(dimVAO);
             glDrawArrays(GL_LINES, 0, dimVerts);
         }
-        // ⑧ 選択部材の BoundingBox（白線）
         if (state.selectedMember >= 0) {
             glUseProgram(lineProg);
             glUniformMatrix4fv(glGetUniformLocation(lineProg,"uMVP"),1,GL_FALSE,mvp.data());
@@ -282,55 +195,25 @@ int main(int argc, char** argv) {
         glUniform3f(locLD, ld.x,ld.y,ld.z);
         glUniform1f(locWire, state.wire ? 1.0f : 0.0f);
         glUniform1f(locHL, 0.0f);
+#ifndef __EMSCRIPTEN__
+        // glPolygonMode は GLES3/WebGL2 に無い。Web ではシェーダ側の uWire 着色で表現。
         glPolygonMode(GL_FRONT_AND_BACK, state.wire ? GL_LINE : GL_FILL);
+#endif
         glBindVertexArray(meshVAO);
         glDrawArrays(GL_TRIANGLES, 0, meshVerts);
-        // 選択部材を 1.04x スケール + 黄色で重ねる
         if (hlVerts > 0) {
             glUniform1f(locHL, 1.0f);
             glBindVertexArray(hlVAO);
             glDrawArrays(GL_TRIANGLES, 0, hlVerts);
         }
+#ifndef __EMSCRIPTEN__
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+#endif
         glBindVertexArray(0);
-    };
-
-    // ---- ヘッドレスモード ---------------------------------------------------
-    if (!shot.empty()) {
-        // --select N でプリセレクト（スクリーンショット用）
-        if (selectArg >= 0 && selectArg < (int)frame.size()) {
-            auto hm = buildMesh({frame[selectArg]}, 1.04f);
-            hlVerts = static_cast<GLsizei>(hm.size() / 9);
-            glBindBuffer(GL_ARRAY_BUFFER, hlVBO);
-            glBufferData(GL_ARRAY_BUFFER,
-                         static_cast<GLsizeiptr>(hm.size()*sizeof(float)),
-                         hm.data(), GL_DYNAMIC_DRAW);
-            auto blines = makeBBoxLines(memberBounds(frame[selectArg]));
-            glBindBuffer(GL_ARRAY_BUFFER, bboxVBO);
-            glBufferData(GL_ARRAY_BUFFER,
-                         static_cast<GLsizeiptr>(blines.size()*sizeof(float)),
-                         blines.data(), GL_DYNAMIC_DRAW);
-            state.selectedMember = selectArg;
-            std::printf("[select] %s\n%s",
-                        frame[selectArg].id,
-                        memberInfoConsole(frame[selectArg]).c_str());
-        }
-        int fbW, fbH;
-        glfwGetFramebufferSize(win, &fbW, &fbH);
-        drawScene(fbW, fbH);
-        glFinish();
-        if (writePPM(shot, fbW, fbH)) std::printf("wrote %s (%dx%d)\n", shot.c_str(), fbW, fbH);
-        else std::fprintf(stderr, "failed to write %s\n", shot.c_str());
-        glfwDestroyWindow(win);
-        glfwTerminate();
-        return 0;
     }
 
-    // ---- インタラクティブ・ループ -------------------------------------------
-    double prevTime   = glfwGetTime();
-    int    frameCount = 0;
-
-    while (!glfwWindowShouldClose(win)) {
+    // ---- 1 フレーム分の更新（旧インタラクティブループの中身）--------------
+    void tick() {
         glfwPollEvents();
 
         // ⑫ FPS（1 秒ごとにタイトル更新・部材未選択時のみ）
@@ -371,20 +254,17 @@ int main(int argc, char** argv) {
             if (best != state.selectedMember) {
                 state.selectedMember = best;
                 if (best >= 0) {
-                    // ② 選択部材1本を 1.04x スケールで hlVBO にアップロード
                     auto hm = buildMesh({frame[best]}, 1.04f);
                     hlVerts = static_cast<GLsizei>(hm.size() / 9);
                     glBindBuffer(GL_ARRAY_BUFFER, hlVBO);
                     glBufferData(GL_ARRAY_BUFFER,
                                  static_cast<GLsizeiptr>(hm.size()*sizeof(float)),
                                  hm.data(), GL_DYNAMIC_DRAW);
-                    // ⑧ BBox 更新
                     auto blines = makeBBoxLines(memberBounds(frame[best]));
                     glBindBuffer(GL_ARRAY_BUFFER, bboxVBO);
                     glBufferData(GL_ARRAY_BUFFER,
                                  static_cast<GLsizeiptr>(blines.size()*sizeof(float)),
                                  blines.data(), GL_DYNAMIC_DRAW);
-                    // ① タイトル + コンソール
                     std::string title = "FrameLens | " + memberInfoTitle(frame[best]);
                     glfwSetWindowTitle(win, title.c_str());
                     std::printf("[select]\n%s", memberInfoConsole(frame[best]).c_str());
@@ -400,33 +280,211 @@ int main(int argc, char** argv) {
         if (state.pendingCsvExport) {
             state.pendingCsvExport = false;
             const char* csvPath = "framelens_export.csv";
-            if (csvExport(frame, csvPath))
+            if (csvExport(frame, csvPath)) {
                 std::printf("[export] Saved %s (%zu members)\n", csvPath, frame.size());
-            else
+#ifdef __EMSCRIPTEN__
+                browserDownload(csvPath, csvPath, "text/csv");
+#endif
+            } else {
                 std::fprintf(stderr, "[export] Failed to write %s\n", csvPath);
+            }
         }
 
-        // P キー → スクリーンショット
+        // P キー → スクリーンショット（ネイティブのみ）
         if (state.pendingShot) {
             state.pendingShot = false;
+#ifndef __EMSCRIPTEN__
             int fbW, fbH;
             glfwGetFramebufferSize(win, &fbW, &fbH);
             if (writePPM("screenshot.ppm", fbW, fbH))
                 std::printf("[screenshot] Saved screenshot.ppm (%dx%d)\n", fbW, fbH);
+#endif
         }
 
         int fbW, fbH;
         glfwGetFramebufferSize(win, &fbW, &fbH);
-        drawScene(fbW, fbH);
+        draw(fbW, fbH);
         glfwSwapBuffers(win);
     }
+};
 
-    glDeleteVertexArrays(1, &meshVAO); glDeleteBuffers(1, &meshVBO);
-    glDeleteVertexArrays(1, &gridVAO); glDeleteBuffers(1, &gridVBO);
-    glDeleteVertexArrays(1, &dimVAO);  glDeleteBuffers(1, &dimVBO);
-    glDeleteVertexArrays(1, &hlVAO);   glDeleteBuffers(1, &hlVBO);
-    glDeleteVertexArrays(1, &bboxVAO); glDeleteBuffers(1, &bboxVBO);
+static App* g_app = nullptr;
+
+int main(int argc, char** argv) {
+    // ---- 引数 ---------------------------------------------------------------
+    std::string shot;
+    std::string configPath = "house.json";
+    int   winW = 1280, winH = 800;
+    int   selectArg = -1;
+    float argYaw = 0.9f, argPitch = 0.35f;
+    for (int i = 1; i < argc; ++i) {
+        if      (!std::strcmp(argv[i], "--shot")   && i+1<argc) shot       = argv[++i];
+        else if ((!std::strcmp(argv[i], "--in") ||
+                  !std::strcmp(argv[i], "--config")) && i+1<argc) configPath = argv[++i];
+        else if (!std::strcmp(argv[i], "--select") && i+1<argc) selectArg = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--size")   && i+1<argc) std::sscanf(argv[++i], "%dx%d", &winW, &winH);
+        else if (!std::strcmp(argv[i], "--yaw")    && i+1<argc) argYaw   = static_cast<float>(std::atof(argv[++i]));
+        else if (!std::strcmp(argv[i], "--pitch")  && i+1<argc) argPitch = static_cast<float>(std::atof(argv[++i]));
+    }
+
+    // ---- 設定 + ジオメトリ生成 ----------------------------------------------
+    FrameConfig cfg   = loadConfig(configPath);
+    std::vector<Member> frame = generateFrame(cfg);
+    std::vector<float>  mesh  = buildMesh(frame);
+    std::vector<float>  grid  = buildGrid(4000.0f, cfg.studPitch);
+    std::vector<float>  dimv  = buildDimLines(cfg.width, cfg.depth);
+
+    std::printf("Members: %zu\n%s\n", frame.size(), billOfMaterials(frame).c_str());
+
+    // ---- GLFW / OpenGL 初期化 -----------------------------------------------
+    if (!glfwInit()) { std::fprintf(stderr, "glfwInit failed\n"); return 1; }
+#ifdef __EMSCRIPTEN__
+    // WebGL2 / GLES3 コンテキスト
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+#else
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+    glfwWindowHint(GLFW_SAMPLES, 4);
+    if (!shot.empty()) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+    GLFWwindow* win = glfwCreateWindow(winW, winH,
+        "FrameLens — 2x4 Framing Viewer  |  Click member to inspect",
+        nullptr, nullptr);
+    if (!win) { std::fprintf(stderr, "window creation failed\n"); glfwTerminate(); return 1; }
+    glfwMakeContextCurrent(win);
+    glfwSwapInterval(1);
+
+#ifndef __EMSCRIPTEN__
+    glewExperimental = GL_TRUE;
+    if (glewInit() != GLEW_OK) { std::fprintf(stderr, "glewInit failed\n"); return 1; }
+#endif
+    glGetError();
+    std::printf("OpenGL %s / GLSL %s\n",
+                glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    // ---- アプリ状態（ヒープ）------------------------------------------------
+    App* app = new App();
+    g_app = app;
+    app->win   = win;
+    app->frame = std::move(frame);
+
+    // ---- メッシュ VAO/VBO ---------------------------------------------------
+    app->meshVerts = static_cast<GLsizei>(mesh.size() / 9);
+    GLuint meshVBO;
+    glGenVertexArrays(1, &app->meshVAO); glGenBuffers(1, &meshVBO);
+    glBindVertexArray(app->meshVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, meshVBO);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(mesh.size()*sizeof(float)),
+                 mesh.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)0);            glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(6*sizeof(float))); glEnableVertexAttribArray(2);
+
+    // ---- グリッド VAO/VBO ---------------------------------------------------
+    app->gridVerts = static_cast<GLsizei>(grid.size() / 3);
+    GLuint gridVBO;
+    glGenVertexArrays(1, &app->gridVAO); glGenBuffers(1, &gridVBO);
+    glBindVertexArray(app->gridVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(grid.size()*sizeof(float)),
+                 grid.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
+
+    // ---- 寸法線 VAO/VBO -----------------------------------------------------
+    app->dimVerts = static_cast<GLsizei>(dimv.size() / 3);
+    GLuint dimVBO;
+    glGenVertexArrays(1, &app->dimVAO); glGenBuffers(1, &dimVBO);
+    glBindVertexArray(app->dimVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, dimVBO);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(dimv.size()*sizeof(float)),
+                 dimv.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
+
+    // ---- ハイライト VAO/VBO -------------------------------------------------
+    glGenVertexArrays(1, &app->hlVAO); glGenBuffers(1, &app->hlVBO);
+    glBindVertexArray(app->hlVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, app->hlVBO);
+    glBufferData(GL_ARRAY_BUFFER, 36*9*sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)0);            glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,9*sizeof(float),(void*)(6*sizeof(float))); glEnableVertexAttribArray(2);
+
+    // ---- ⑧ BBox VAO/VBO -----------------------------------------------------
+    glGenVertexArrays(1, &app->bboxVAO); glGenBuffers(1, &app->bboxVBO);
+    glBindVertexArray(app->bboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, app->bboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, 72*sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+
+    app->modelProg = linkProgram(MODEL_VS, MODEL_FS);
+    app->lineProg  = linkProgram(LINE_VS, LINE_FS);
+
+    glEnable(GL_DEPTH_TEST);
+#ifndef __EMSCRIPTEN__
+    glEnable(GL_MULTISAMPLE); // GLES3 は既定 FBO の MSAA を context 属性で行うため不要
+#endif
+
+    app->state.cam.target = frameCenter(cfg);
+    app->state.cam.yaw    = argYaw;
+    app->state.cam.pitch  = argPitch;
+    app->state.cam.dist   = 8200.0f;
+    app->state.home       = app->state.cam;
+    glfwSetWindowUserPointer(win, &app->state);
+    glfwSetMouseButtonCallback(win, mouseButtonCB);
+    glfwSetCursorPosCallback(win, cursorPosCB);
+    glfwSetScrollCallback(win, scrollCB);
+    glfwSetKeyCallback(win, keyCB);
+
+    // ---- ヘッドレスモード（ネイティブ）-------------------------------------
+    if (!shot.empty()) {
+        if (selectArg >= 0 && selectArg < (int)app->frame.size()) {
+            auto hm = buildMesh({app->frame[selectArg]}, 1.04f);
+            app->hlVerts = static_cast<GLsizei>(hm.size() / 9);
+            glBindBuffer(GL_ARRAY_BUFFER, app->hlVBO);
+            glBufferData(GL_ARRAY_BUFFER,
+                         static_cast<GLsizeiptr>(hm.size()*sizeof(float)),
+                         hm.data(), GL_DYNAMIC_DRAW);
+            auto blines = makeBBoxLines(memberBounds(app->frame[selectArg]));
+            glBindBuffer(GL_ARRAY_BUFFER, app->bboxVBO);
+            glBufferData(GL_ARRAY_BUFFER,
+                         static_cast<GLsizeiptr>(blines.size()*sizeof(float)),
+                         blines.data(), GL_DYNAMIC_DRAW);
+            app->state.selectedMember = selectArg;
+            std::printf("[select] %s\n%s",
+                        app->frame[selectArg].id,
+                        memberInfoConsole(app->frame[selectArg]).c_str());
+        }
+        int fbW, fbH;
+        glfwGetFramebufferSize(win, &fbW, &fbH);
+        app->draw(fbW, fbH);
+        glFinish();
+        if (writePPM(shot, fbW, fbH)) std::printf("wrote %s (%dx%d)\n", shot.c_str(), fbW, fbH);
+        else std::fprintf(stderr, "failed to write %s\n", shot.c_str());
+        glfwDestroyWindow(win);
+        glfwTerminate();
+        delete app;
+        return 0;
+    }
+
+    // ---- メインループ -------------------------------------------------------
+    app->prevTime   = glfwGetTime();
+    app->frameCount = 0;
+
+#ifdef __EMSCRIPTEN__
+    // ブラウザに毎フレーム呼んでもらう（無限 while はタブを固めるため使えない）
+    emscripten_set_main_loop_arg(
+        [](void* p){ static_cast<App*>(p)->tick(); }, app, 0, 1);
+#else
+    while (!glfwWindowShouldClose(win)) app->tick();
+
     glfwDestroyWindow(win);
     glfwTerminate();
+    delete app;
+#endif
     return 0;
 }

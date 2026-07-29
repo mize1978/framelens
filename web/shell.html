@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FrameLens — 2×4 Framing Viewer (C++ → WebAssembly → WebGL)</title>
+<style>
+  :root{ --bg:#14161c; --panel:#1c1f27; --line:#2b2f3a; --text:#e8eaf0; --muted:#9aa2b1; --gold:#c89b54; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Zen Kaku Gothic New",Segoe UI,sans-serif; }
+  .wrap{ max-width:1280px; margin:0 auto; padding:20px 18px 40px; }
+  header{ display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
+  h1{ font-size:20px; margin:0; letter-spacing:.02em; }
+  h1 b{ color:var(--gold); }
+  .sub{ color:var(--muted); font-size:13px; }
+  .stage{ position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden;
+    background:#0e1014; box-shadow:0 10px 40px rgba(0,0,0,.35); }
+  canvas{ display:block; width:100%; height:auto; aspect-ratio:1280/800; background:#0e1014; outline:none; }
+  #loading{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:14px; letter-spacing:.04em; }
+  .legend{ display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:14px; color:var(--muted); font-size:13px; }
+  .legend b{ color:var(--text); font-weight:600; }
+  .legend .k{ display:inline-block; min-width:20px; padding:1px 6px; border:1px solid var(--line);
+    border-radius:5px; background:var(--panel); color:var(--text); font-size:12px; text-align:center; }
+  footer{ margin-top:18px; color:var(--muted); font-size:12px; }
+  footer a{ color:var(--gold); text-decoration:none; }
+  .tag{ display:inline-block; border:1px solid var(--line); background:var(--panel);
+    border-radius:999px; padding:2px 10px; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🖼️ <b>FrameLens</b> — 2×4 Framing Viewer</h1>
+    <span class="tag">C++ → WebAssembly → WebGL2</span>
+  </header>
+
+  <div class="stage">
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <div id="loading">Loading WebAssembly…</div>
+  </div>
+
+  <div class="legend">
+    <span><b>ドラッグ</b> 回転</span>
+    <span><b>スクロール</b> ズーム</span>
+    <span><b>クリック</b> 部材を選択</span>
+    <span><span class="k">W</span> ワイヤー</span>
+    <span><span class="k">G</span> グリッド</span>
+    <span><span class="k">D</span> 寸法線</span>
+    <span><span class="k">C</span> CSV書き出し</span>
+    <span><span class="k">R</span> 視点リセット</span>
+  </div>
+
+  <footer>
+    2×4 木造フレームを手続き生成し、リアルタイム3D表示・部材のRay Picking選択・拾い出しCSV出力を行う。
+    元はC++/OpenGLのデスクトップアプリを <b>Emscripten</b> で WebAssembly / WebGL2 に移植。
+    &nbsp;·&nbsp; <a href="https://github.com/mize1978/FrameLens">GitHub</a>
+    &nbsp;·&nbsp; <a href="https://mize1978.github.io/">Portfolio</a>
+  </footer>
+</div>
+
+<script>
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print:    function(t){ console.log(t); },
+    printErr: function(t){ console.error(t); },
+    onRuntimeInitialized: function(){ var l=document.getElementById('loading'); if(l) l.remove(); },
+  };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

@@ -1,6 +1,9 @@
 # FrameLens
 
-### Data-driven 2×4 Framing Mini-CAD — C++17 / OpenGL 3.3 Core
+### Data-driven 2×4 Framing Mini-CAD — C++17 / OpenGL 3.3 Core · WebAssembly / WebGL2
+
+> **▶ Live Demo（ブラウザで動く）: https://mize1978.github.io/framelens/**
+> C++/OpenGL のデスクトップアプリを **Emscripten で WebAssembly / WebGL2 に移植**。同一ソースからネイティブとブラウザの両方をビルドします。
 
 <!-- Technical Highlights -->
 ![OpenGL 3.3 Core](https://img.shields.io/badge/-OpenGL_3.3_Core-5586A4?style=flat-square)
@@ -205,6 +208,23 @@ cmake -S . -B build && cmake --build build -j
 ./build/framelens --in house.json --shot out.ppm --size 1280x800 --select 40
 # ディスプレイの無いサーバなら: xvfb-run -a ./build/framelens --shot out.ppm
 ```
+
+### Web（WebAssembly / WebGL2）
+
+依存: **Emscripten (`emcc`)**。GLFW3 / GLES3 は Emscripten が内蔵するため GLEW は不要。
+ネイティブ側のコードは一切壊さず、`#ifdef __EMSCRIPTEN__` 分岐だけで両対応しています。
+
+```sh
+# Emscripten を用意（例: brew install emscripten）
+./build_web.sh
+# → web/framelens.html / .js / .wasm / .data を生成
+# ローカル確認: (cd web && python3 -m http.server) → http://localhost:8000/framelens.html
+```
+
+移植のポイント:
+- OpenGL 3.3 Core → **WebGL2 (GLES3)**。シェーダは `#version` をビルド時に注入（`330 core` / `300 es`）
+- 無限 `while` ループ → `emscripten_set_main_loop`（ブラウザにフレームを委譲）
+- `glPolygonMode` / `GL_MULTISAMPLE` は GLES3 に無いためガード、CSV は `EM_JS` でブラウザ DL に
 
 ---
 
