@@ -17,4 +17,8 @@ emcc -std=c++17 -O2 -I src \
   --shell-file web/shell.html \
   -o web/framelens.html
 
+# GitHub Pages/CDN で旧 JS/WASM が混在しないよう、生成アセットに同一バージョンを付ける。
+asset_version="$(shasum -a 256 web/framelens.js | awk '{print substr($1,1,12)}')"
+python3 -c 'import pathlib,sys; v=sys.argv[1]; h=pathlib.Path("web/framelens.html"); j=pathlib.Path("web/framelens.js"); h.write_text(h.read_text().replace("framelens.js", f"framelens.js?v={v}")); j.write_text(j.read_text().replace("framelens.wasm", f"framelens.wasm?v={v}").replace("framelens.data", f"framelens.data?v={v}"))' "$asset_version"
+
 echo "✅ built web/framelens.html"
