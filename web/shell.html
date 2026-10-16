@@ -19,7 +19,7 @@
 <meta name="twitter:description" content="C++/OpenGLの3Dフレーム解析ツールをEmscriptenでブラウザへ移植。ブラウザでそのまま動く。">
 <meta name="twitter:image" content="https://mize1978.github.io/banner-framelens.jpg">
 <style>
-  :root{ --bg:#14161c; --panel:#1c1f27; --line:#2b2f3a; --text:#e8eaf0; --muted:#9aa2b1; --gold:#c89b54; }
+  :root{ --bg:#14161c; --panel:#1c1f27; --line:#2b2f3a; --text:#e8eaf0; --muted:#9aa2b1; --gold:#c89b54; --teal:#6dd6c7; }
   *{ box-sizing:border-box; }
   html,body{ margin:0; height:100%; background:var(--bg); color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Zen Kaku Gothic New",Segoe UI,sans-serif; }
@@ -30,13 +30,25 @@
   .sub{ color:var(--muted); font-size:13px; }
   .stage{ position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden;
     background:#0e1014; box-shadow:0 10px 40px rgba(0,0,0,.35); }
-  canvas{ display:block; width:100%; height:auto; aspect-ratio:1280/800; background:#0e1014; outline:none; }
+  canvas{ display:block; width:100%; height:auto; aspect-ratio:1280/800; background:#0e1014; outline:none; touch-action:none; }
+  canvas:focus-visible{ box-shadow:inset 0 0 0 2px var(--teal); }
   #loading{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:var(--muted); font-size:14px; letter-spacing:.04em; }
   .legend{ display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:14px; color:var(--muted); font-size:13px; }
   .legend b{ color:var(--text); font-weight:600; }
   .legend .k{ display:inline-block; min-width:20px; padding:1px 6px; border:1px solid var(--line);
     border-radius:5px; background:var(--panel); color:var(--text); font-size:12px; text-align:center; }
+  .toolbar{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .tool-button{ appearance:none; border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+    background:var(--panel); color:var(--muted); font:inherit; font-size:12px; cursor:pointer; }
+  .tool-button:hover,.tool-button:focus-visible{ border-color:var(--gold); color:var(--text); outline:none; }
+  .tool-button.is-active{ border-color:rgba(109,214,199,.55); color:var(--teal); background:rgba(109,214,199,.08); }
+  .member-panel{ margin-top:12px; border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    background:var(--panel); }
+  .member-panel h2{ margin:0 0 6px; color:var(--gold); font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+  #member-info{ margin:0; color:var(--muted); font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #member-info.has-selection{ color:var(--text); }
+  #loading.is-error{ color:#ff8b8b; text-align:center; padding:24px; }
   footer{ margin-top:18px; color:var(--muted); font-size:12px; }
   footer a{ color:var(--gold); text-decoration:none; }
   .tag{ display:inline-block; border:1px solid var(--line); background:var(--panel);
@@ -51,9 +63,22 @@
   </header>
 
   <div class="stage">
-    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="0" aria-label="2×4木造フレームの3Dビューア"></canvas>
     <div id="loading">Loading WebAssembly…</div>
   </div>
+
+  <div class="toolbar" aria-label="表示操作">
+    <button class="tool-button" type="button" data-command="wire" aria-pressed="false" onclick="runCommand(1)">ワイヤー表示</button>
+    <button class="tool-button is-active" type="button" data-command="grid" aria-pressed="true" onclick="runCommand(2)">グリッド</button>
+    <button class="tool-button is-active" type="button" data-command="dims" aria-pressed="true" onclick="runCommand(3)">寸法線</button>
+    <button class="tool-button" type="button" onclick="runCommand(4)">CSV書き出し</button>
+    <button class="tool-button" type="button" onclick="runCommand(5)">視点リセット</button>
+  </div>
+
+  <section class="member-panel" aria-live="polite">
+    <h2>Selected member</h2>
+    <p id="member-info">部材をクリックすると、ID・種類・ゾーン・断面・材長・材種が表示されます。</p>
+  </section>
 
   <div class="legend">
     <span><b>ドラッグ</b> 回転</span>
@@ -80,7 +105,16 @@
     print:    function(t){ console.log(t); },
     printErr: function(t){ console.error(t); },
     onRuntimeInitialized: function(){ var l=document.getElementById('loading'); if(l) l.remove(); },
+    onAbort: function(){
+      var l=document.getElementById('loading');
+      if(l){ l.textContent='読み込みに失敗しました。ページを再読み込みしてください。'; l.classList.add('is-error'); }
+    },
   };
+  function runCommand(command){
+    if (typeof Module.ccall !== 'function') return;
+    Module.ccall('framelens_command', null, ['number'], [command]);
+    document.getElementById('canvas').focus({preventScroll:true});
+  }
 </script>
 {{{ SCRIPT }}}
 <script>

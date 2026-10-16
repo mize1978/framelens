@@ -11,6 +11,8 @@ emcc -std=c++17 -O2 -I src \
   -sMAX_WEBGL_VERSION=2 -sMIN_WEBGL_VERSION=2 -sFULL_ES3=1 \
   -sALLOW_MEMORY_GROWTH=1 \
   -sGL_ASSERTIONS=1 -sASSERTIONS=1 \
+  -sEXPORTED_FUNCTIONS='["_main","_framelens_command"]' \
+  -sEXPORTED_RUNTIME_METHODS='["ccall"]' \
   --preload-file house.json \
   --shell-file web/shell.html \
   -o web/framelens.html

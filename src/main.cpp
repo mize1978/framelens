@@ -110,6 +110,23 @@ EM_JS(void, browserDownload, (const char* path, const char* filename, const char
         document.body.removeChild(a); URL.revokeObjectURL(url);
     } catch (e) { console.error('download failed', e); }
 });
+
+EM_JS(void, browserUpdateSelection, (const char* info), {
+    var el = document.getElementById('member-info');
+    if (!el) return;
+    var text = UTF8ToString(info);
+    el.textContent = text || '部材をクリックすると詳細が表示されます。';
+    el.classList.toggle('has-selection', !!text);
+});
+
+EM_JS(void, browserSyncControls, (int wire, int grid, int dims), {
+    [['wire', wire], ['grid', grid], ['dims', dims]].forEach(function(pair) {
+        var button = document.querySelector('[data-command="' + pair[0] + '"]');
+        if (!button) return;
+        button.classList.toggle('is-active', !!pair[1]);
+        button.setAttribute('aria-pressed', pair[1] ? 'true' : 'false');
+    });
+});
 #endif
 
 // ---- PPM 書き出し（ネイティブのスクリーンショット/--shot 用）---------------
@@ -268,10 +285,16 @@ struct App {
                     std::string title = "FrameLens | " + memberInfoTitle(frame[best]);
                     glfwSetWindowTitle(win, title.c_str());
                     std::printf("[select]\n%s", memberInfoConsole(frame[best]).c_str());
+#ifdef __EMSCRIPTEN__
+                    browserUpdateSelection(title.c_str() + std::strlen("FrameLens | "));
+#endif
                 } else {
                     hlVerts = 0;
                     glfwSetWindowTitle(win,
                         "FrameLens — 2x4 Framing Viewer  |  Click member to inspect");
+#ifdef __EMSCRIPTEN__
+                    browserUpdateSelection("");
+#endif
                 }
             }
         }
@@ -309,6 +332,21 @@ struct App {
 };
 
 static App* g_app = nullptr;
+
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE void framelens_command(int command) {
+    if (!g_app) return;
+    switch (command) {
+        case 1: g_app->state.wire = !g_app->state.wire; break;
+        case 2: g_app->state.grid = !g_app->state.grid; break;
+        case 3: g_app->state.dims = !g_app->state.dims; break;
+        case 4: g_app->state.pendingCsvExport = true; break;
+        case 5: g_app->state.cam = g_app->state.home; break;
+        default: return;
+    }
+    browserSyncControls(g_app->state.wire, g_app->state.grid, g_app->state.dims);
+}
+#endif
 
 int main(int argc, char** argv) {
     // ---- 引数 ---------------------------------------------------------------
